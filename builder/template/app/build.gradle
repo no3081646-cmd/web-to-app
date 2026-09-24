@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'app.webtoapp'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "@@PACKAGE_NAME@@"
+        minSdk 26
+        targetSdk 34
+        versionCode @@VERSION_CODE@@
+        versionName "@@VERSION_NAME@@"
+        resValue "string", "app_name", "@@APP_NAME@@"
+        buildConfigField "String", "START_URL", "\"@@START_URL@@\""
+        buildConfigField "boolean", "OFFLINE_MODE", "@@OFFLINE_MODE@@"
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.webkit:webkit:1.11.0'
+    implementation 'androidx.core:core:1.13.1'
+}
