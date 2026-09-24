@@ -1,0 +1,98 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: Build id
+        required: true
+      app_name:
+        description: App name
+        required: true
+      package_name:
+        description: Package name
+        required: true
+      version_name:
+        description: Version name
+        required: true
+      version_code:
+        description: Version code
+        required: true
+      source_type:
+        description: url | html | zip
+        required: true
+      source_url:
+        description: Website URL or downloadable source file
+        required: true
+      permissions:
+        description: Comma separated Android permissions
+        required: false
+        default: ""
+      callback_url:
+        description: Callback endpoint of the web app
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report building
+        run: |
+          echo "::add-mask::${{ inputs.callback_url }}"
+          curl -sS -X POST "${{ inputs.callback_url }}" \
+            -H "content-type: application/json" \
+            -d "{\"build_id\":\"${{ inputs.build_id }}\",\"status\":\"building\",\"run_id\":\"${{ github.run_id }}\"}" || true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Prepare Android project
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+          PACKAGE_NAME: ${{ inputs.package_name }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          SOURCE_TYPE: ${{ inputs.source_type }}
+          SOURCE_URL: ${{ inputs.source_url }}
+          PERMISSIONS: ${{ inputs.permissions }}
+          OUT_DIR: build-project
+        run: python3 builder/prepare.py
+
+      - name: Build debug APK
+        working-directory: build-project
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK to app
+        run: |
+          APK=$(find build-project/app/build/outputs/apk/debug -name '*.apk' | head -n1)
+          echo "APK: $APK ($(stat -c%s "$APK") bytes)"
+          curl -sS --fail -X POST "${{ inputs.callback_url }}&kind=apk" \
+            -H "content-type: application/vnd.android.package-archive" \
+            --data-binary "@$APK"
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "::add-mask::${{ inputs.callback_url }}"
+          curl -sS -X POST "${{ inputs.callback_url }}" \
+            -H "content-type: application/json" \
+            -d "{\"build_id\":\"${{ inputs.build_id }}\",\"status\":\"failed\",\"error\":\"Build gagal. Lihat log GitHub Actions run ${{ github.run_id }}.\"}" || true
+
+      - name: Upload APK artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ inputs.build_id }}
+          path: build-project/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: ignore
